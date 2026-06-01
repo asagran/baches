@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MapeaYuc</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:sans-serif;background:#f5f5f0;color:#222;height:100vh;display:flex;flex-direction:column}
+#header{background:#1a6b4a;color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;z-index:1000}
+#header h1{font-size:18px;font-weight:600}
+#header span{font-size:12px;opacity:.8}
+#map{flex:1;z-index:1}
+#fab{position:fixed;bottom:80px;right:16px;background:#1a6b4a;color:#fff;border:none;border-radius:50%;width:52px;height:52px;font-size:26px;cursor:pointer;z-index:999;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+#btn-locate{position:fixed;bottom:80px;left:16px;background:#fff;color:#1a6b4a;border:2px solid #1a6b4a;border-radius:50%;width:52px;height:52px;font-size:22px;cursor:pointer;z-index:999;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+#bottom-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #ddd;display:flex;z-index:1000}
+.tab{flex:1;padding:10px 4px;text-align:center;font-size:11px;color:#888;cursor:pointer;border:none;background:none}
+.tab.active{color:#1a6b4a;font-weight:600;border-top:2px solid #1a6b4a}
+.tab i{display:block;font-size:20px;margin-bottom:2px}
+#modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;align-items:center;justify-content:center}
+#modal-bg.open{display:flex}
+#modal{background:#fff;border-radius:14px;padding:20px;width:92%;max-width:380px;max-height:90vh;overflow-y:auto}
+#modal h2{font-size:16px;margin-bottom:14px;color:#1a6b4a}
+label{font-size:13px;color:#555;display:block;margin-bottom:4px}
+select,input,textarea{width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px;font-size:14px;margin-bottom:12px;font-family:sans-serif}
+textarea{resize:vertical;min-height:72px}
+.btn{display:block;width:100%;padding:11px;border-radius:10px;border:none;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:8px}
+.btn-primary{background:#1a6b4a;color:#fff}
+.btn-secondary{background:#f0f0f0;color:#444}
+.btn-danger{background:#d9534f;color:#fff}
+#panel{display:none;position:fixed;bottom:56px;left:0;right:0;top:54px;background:#f5f5f0;z-index:900;overflow-y:auto;padding:12px}
+#panel.open{display:block}
+.report-card{background:#fff;border-radius:10px;padding:12px;margin-bottom:10px;border:1px solid #e0e0e0}
+.type-badge{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;display:inline-block;margin-bottom:6px}
+.bache{background:#fff3cd;color:#856404}
+.inundacion{background:#cce5ff;color:#004085}
+.cerrada{background:#f8d7da;color:#721c24}
+.report-card p{font-size:13px;color:#444;margin-bottom:4px}
+.action-row{display:flex;gap:8px;margin-top:8px}
+.action-row button{flex:1;padding:7px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
+.aprobar{background:#d4edda;color:#155724}
+.rechazar{background:#f8d7da;color:#721c24}
+.ver-mapa{background:#e8f0fe;color:#1a3c6e}
+#login-panel{display:none;position:fixed;inset:0;background:#f5f5f0;z-index:3000;align-items:center;justify-content:center}
+#login-panel.open{display:flex}
+#login-box{background:#fff;border-radius:14px;padding:24px;width:90%;max-width:340px}
+#login-box h2{font-size:18px;color:#1a6b4a;margin-bottom:16px;text-align:center}
+.badge-count{background:#d9534f;color:#fff;border-radius:50%;font-size:10px;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-left:3px}
+.toast{position:fixed;top:64px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 18px;border-radius:20px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>🗺️ MapeaYuc</h1>
+  <span>Progreso, Yucatán</span>
+</div>
+
+<div id="map"></div>
+<div class="toast" id="toast"></div>
+
+<button id="btn-locate" onclick="locateUser()" title="Mi ubicación">📍</button>
+<button id="fab" onclick="openReportModal()" title="Reportar problema">+</button>
+
+<div id="bottom-bar">
+  <button class="tab active" onclick="showTab('mapa',this)"><i>🗺️</i>Mapa</button>
+  <button class="tab" onclick="showTab('reportes',this)" id="tab-reportes"><i>📋</i>Pendientes</button>
+  <button class="tab" onclick="showTab('admin',this)"><i>🔑</i>Admin</button>
+</div>
+
+<div id="panel">
+  <h3 style="font-size:14px;color:#555;margin-bottom:10px">Reportes pendientes de verificación</h3>
+  <div id="pending-list"></div>
+</div>
+
+<div id="modal-bg">
+  <div id="modal">
+    <h2 id="modal-title">Nuevo reporte</h2>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<div id="login-panel">
+  <div id="login-box">
+    <h2>🔑 Acceso colaboradores</h2>
+    <label>Usuario</label>
+    <input type="text" id="login-user" placeholder="usuario"/>
+    <label>Contraseña</label>
+    <input type="password" id="login-pass" placeholder="••••••"/>
+    <button class="btn btn-primary" onclick="doLogin()">Entrar</button>
+    <button class="btn btn-secondary" onclick="closeLogin()">Cancelar</button>
+    <p id="login-err" style="color:#d9534f;font-size:12px;text-align:center;margin-top:4px"></p>
+  </div>
+</div>
+
+<script>
+const SUPA_URL = 'https://inklejebbudmklsfifev.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlua2xlamViYnVkbWtsc2ZpZmV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMjYyMjAsImV4cCI6MjA5NTkwMjIyMH0.XSjsVlr9_Khr-HZ-RJmnge9VjtneISrdtrrK1LqEagQ';
+
+const headers = {
+  'Content-Type': 'application/json',
+  'apikey': SUPA_KEY,
+  'Authorization': `Bearer ${SUPA_KEY}`
+};
+
+async function sbGet(table, params=''){
+  const r = await fetch(`${SUPA_URL}/rest/v1/${table}?${params}`, {headers});
+  return r.json();
+}
+async function sbPost(table, body){
+  const r = await fetch(`${SUPA_URL}/rest/v1/${table}`, {
+    method:'POST', headers:{...headers,'Prefer':'return=representation'},
+    body: JSON.stringify(body)
+  });
+  return r.json();
+}
+async function sbPatch(table, id, body){
+  const r = await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, {
+    method:'PATCH', headers:{...headers,'Prefer':'return=representation'},
+    body: JSON.stringify(body)
+  });
+  return r.json();
+}
+async function sbDelete(table, id){
+  await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, {
+    method:'DELETE', headers
+  });
+}
+
+const DEFAULT = [21.2833, -89.6640];
+const TIPOS = {
+  bache:{label:'🕳️ Bache',color:'#856404',badgeClass:'bache'},
+  inundacion:{label:'🌊 Inundación',color:'#004085',badgeClass:'inundacion'},
+  cerrada:{label:'🚧 Calle cerrada',color:'#721c24',badgeClass:'cerrada'}
+};
+
+const map = L.map('map').setView(DEFAULT, 14);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  attribution:'© OpenStreetMap', maxZoom:19
+}).addTo(map);
+
+let loggedIn = false, currentUser = '';
+let pendingReports = [], pickingLocation = false, tempLatLng = null;
+let userMarker = null;
+const markerMap = {};
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2500);
+}
+
+function locateUser(){
+  if(!navigator.geolocation){map.setView(DEFAULT,14);return;}
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      const {latitude:lat,longitude:lng} = pos.coords;
+      map.setView([lat,lng],16);
+      if(userMarker) map.removeLayer(userMarker);
+      userMarker = L.circleMarker([lat,lng],{
+        radius:10,color:'#1a6b4a',fillColor:'#4fc3f7',fillOpacity:.9,weight:3
+      }).addTo(map).bindPopup('📍 Tu ubicación actual').openPopup();
+    },
+    ()=>map.setView(DEFAULT,14)
+  );
+}
+locateUser();
+
+map.on('click', e=>{
+  if(!pickingLocation) return;
+  tempLatLng = e.latlng;
+  pickingLocation = false;
+  map.getContainer().style.cursor = '';
+  map.closePopup();
+  showReportForm2();
+});
+
+function makeIcon(tipo){
+  const emojis={bache:'🕳️',inundacion:'🌊',cerrada:'🚧'};
+  return L.divIcon({
+    className:'',
+    html:`<div style="font-size:26px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">${emojis[tipo]||'📍'}</div>`,
+    iconSize:[30,30],iconAnchor:[15,15]
+  });
+}
+
+function addMarker(r){
+  if(markerMap[r.id]) return;
+  const m = L.marker([r.lat,r.lng],{icon:makeIcon(r.tipo)}).addTo(map);
+  m.bindPopup(`
+    <div style="font-weight:700;color:${TIPOS[r.tipo]?.color}">${TIPOS[r.tipo]?.label}</div>
+    <div style="font-size:13px;margin:4px 0">${r.descripcion||'Sin descripción'}</div>
+    <div style="font-size:11px;color:#999">📘 ${r.facebook||'Anónimo'} · 📅 ${r.fecha||''}</div>
+  `);
+  markerMap[r.id] = m;
+}
+
+async function loadApproved(){
+  const data = await sbGet('reportes','estado=eq.aprobado&select=*');
+  if(Array.isArray(data)) data.forEach(addMarker);
+}
+loadApproved();
+
+function showTab(tab, el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  const panel = document.getElementById('panel');
+  if(tab==='mapa'){
+    panel.classList.remove('open');
+    document.getElementById('fab').style.display='block';
+    document.getElementById('btn-locate').style.display='block';
+  } else if(tab==='reportes'){
+    renderPending();
+    panel.classList.add('open');
+    document.getElementById('fab').style.display='none';
+    document.getElementById('btn-locate').style.display='none';
+  } else if(tab==='admin'){
+    panel.classList.remove('open');
+    document.getElementById('fab').style.display='none';
+    document.getElementById('btn-locate').style.display='none';
+    if(!loggedIn) openLogin(); else showAdminMenu();
+  }
+}
+
+function openReportModal(){
+  document.getElementById('modal-title').textContent='Nuevo reporte';
+  document.getElementById('modal-body').innerHTML=`
+    <p style="font-size:13px;color:#555;margin-bottom:14px">Primero toca en el mapa el punto exacto del problema.</p>
+    <button class="btn btn-primary" onclick="startPicking()">📍 Seleccionar punto en el mapa</button>
+    <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+  `;
+  document.getElementById('modal-bg').classList.add('open');
+}
+
+function startPicking(){
+  closeModal();
+  pickingLocation = true;
+  map.getContainer().style.cursor = 'crosshair';
+  L.popup().setLatLng(map.getCenter()).setContent('<b>Toca el punto del problema</b>').openOn(map);
+}
+
+function showReportForm2(){
+  document.getElementById('modal-title').textContent='Detalles del reporte';
+  document.getElementById('modal-body').innerHTML=`
+    <label>Tipo de problema</label>
+    <select id="r-tipo">
+      <option value="bache">🕳️ Bache</option>
+      <option value="inundacion">🌊 Inundación</option>
+      <option value="cerrada">🚧 Calle cerrada</option>
+    </select>
+    <label>Descripción breve</label>
+    <textarea id="r-desc" placeholder="Ej: Bache grande en la esquina, peligroso en lluvia..."></textarea>
+    <label>Tu perfil de Facebook (URL o usuario)</label>
+    <input type="text" id="r-fb" placeholder="facebook.com/tunombre"/>
+    <button class="btn btn-primary" onclick="submitReport()">Enviar reporte</button>
+    <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+  `;
+  document.getElementById('modal-bg').classList.add('open');
+}
+
+async function submitReport(){
+  const tipo = document.getElementById('r-tipo').value;
+  const desc = document.getElementById('r-desc').value.trim();
+  const fb   = document.getElementById('r-fb').value.trim();
+  if(!fb){alert('Por favor ingresa tu Facebook.');return;}
+  if(!tempLatLng){alert('No se seleccionó ubicación.');return;}
+  const btn = document.querySelector('#modal-body .btn-primary');
+  btn.textContent='Enviando...'; btn.disabled=true;
+  const r = {
+    tipo, descripcion:desc, facebook:fb,
+    lat:tempLatLng.lat, lng:tempLatLng.lng,
+    estado:'pendiente',
+    fecha: new Date().toLocaleDateString('es-MX')
+  };
+  try {
+    const res = await sbPost('reportes', r);
+    if(res && res[0]){
+      pendingReports.push(res[0]);
+      updateBadge();
+      closeModal(); tempLatLng=null;
+      toast('✅ Reporte enviado, pendiente de verificación');
+    } else {
+      const errMsg = res?.message || res?.error || JSON.stringify(res);
+      alert('Error al enviar: ' + errMsg);
+      btn.textContent='Enviar reporte'; btn.disabled=false;
+    }
+  } catch(e){
+    alert('Error de conexión: ' + e.message);
+    btn.textContent='Enviar reporte'; btn.disabled=false;
+  }
+}
+
+function closeModal(){
+  document.getElementById('modal-bg').classList.remove('open');
+  if(pickingLocation){pickingLocation=false;map.getContainer().style.cursor='';}
+}
+
+function updateBadge(){
+  const n = pendingReports.length;
+  document.getElementById('tab-reportes').innerHTML=
+    `<i>📋</i>Pendientes${n>0?`<span class="badge-count">${n}</span>`:''}`;
+}
+
+async function loadPending(){
+  const data = await sbGet('reportes','estado=eq.pendiente&select=*');
+  pendingReports = Array.isArray(data) ? data : [];
+  updateBadge();
+}
+
+function renderPending(){
+  const el = document.getElementById('pending-list');
+  if(!loggedIn){
+    el.innerHTML=`<div style="text-align:center;padding:20px;color:#888;font-size:14px">🔑 Inicia sesión como colaborador para ver los reportes pendientes.</div>`;
+    return;
+  }
+  loadPending().then(()=>{
+    if(!pendingReports.length){
+      el.innerHTML=`<div style="text-align:center;padding:20px;color:#888;font-size:14px">✅ No hay reportes pendientes.</div>`;
+      return;
+    }
+    el.innerHTML = pendingReports.map(r=>`
+      <div class="report-card" id="card-${r.id}">
+        <span class="type-badge ${TIPOS[r.tipo]?.badgeClass}">${TIPOS[r.tipo]?.label}</span>
+        <p>${r.descripcion||'Sin descripción'}</p>
+        <p style="font-size:12px;color:#555">📘 <b>${r.facebook||'—'}</b></p>
+        <p style="font-size:11px;color:#999">📅 ${r.fecha||''} · 📍 ${Number(r.lat).toFixed(4)}, ${Number(r.lng).toFixed(4)}</p>
+        <div class="action-row">
+          <button class="aprobar" onclick="aprobar(${r.id})">✅ Aprobar</button>
+          <button class="rechazar" onclick="rechazar(${r.id})">❌ Rechazar</button>
+          <button class="ver-mapa" onclick="verEnMapa(${r.id})">🗺️ Ver</button>
+        </div>
+      </div>
+    `).join('');
+  });
+}
+
+async function aprobar(id){
+  await sbPatch('reportes', id, {estado:'aprobado'});
+  const r = pendingReports.find(x=>x.id===id);
+  if(r){r.estado='aprobado'; addMarker(r);}
+  pendingReports = pendingReports.filter(x=>x.id!==id);
+  updateBadge(); renderPending(); toast('✅ Reporte aprobado y publicado en el mapa');
+}
+
+async function rechazar(id){
+  await sbDelete('reportes', id);
+  pendingReports = pendingReports.filter(x=>x.id!==id);
+  updateBadge(); renderPending(); toast('❌ Reporte rechazado y eliminado');
+}
+
+function verEnMapa(id){
+  const r = pendingReports.find(x=>x.id===id);
+  if(!r) return;
+  showTab('mapa', document.querySelector('.tab'));
+  map.setView([r.lat, r.lng], 17);
+}
+
+function openLogin(){document.getElementById('login-panel').classList.add('open');}
+function closeLogin(){document.getElementById('login-panel').classList.remove('open');}
+
+async function doLogin(){
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  const data = await sbGet('colaboradores',`usuario=eq.${u}&password=eq.${p}&select=*`);
+  if(data && data.length>0){
+    loggedIn=true; currentUser=u;
+    closeLogin(); showAdminMenu(); loadPending();
+  } else {
+    document.getElementById('login-err').textContent='Usuario o contraseña incorrectos.';
+  }
+}
+
+function showAdminMenu(){
+  document.getElementById('modal-title').textContent='Panel de colaborador';
+  document.getElementById('modal-body').innerHTML=`
+    <p style="font-size:14px;color:#444;margin-bottom:14px">Sesión iniciada como <b>${currentUser}</b></p>
+    <button class="btn btn-primary" onclick="closeModal();renderPending();document.getElementById('panel').classList.add('open')">📋 Ver reportes pendientes</button>
+    <button class="btn btn-danger" onclick="doLogout()">Cerrar sesión</button>
+    <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+  `;
+  document.getElementById('modal-bg').classList.add('open');
+}
+
+function doLogout(){
+  loggedIn=false; currentUser='';
+  closeModal(); document.getElementById('panel').classList.remove('open');
+  toast('Sesión cerrada');
+}
+
+document.getElementById('modal-bg').addEventListener('click', e=>{
+  if(e.target===document.getElementById('modal-bg')) closeModal();
+});
+</script>
+</body>
+</html>
